@@ -54,7 +54,10 @@ BROWSER_PATH = r"C:\Users\kamodares\AppData\Local\Programs\Opera GX\opera.exe"
 # OBS: "Iron Man" é do Black Sabbath, não do Iron Maiden (são bandas
 # diferentes). Deixei o clipe oficial do Black Sabbath como padrão.
 # Troque pela URL que você quiser (ex: uma música do Iron Maiden).
-YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v=b3-QqGVt-tM&list=RDb3-QqGVt-tM&start_radio=1"
+YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v=b3-QqGVt-tM&list=RDb3-QqGVt-tM&start_radio=1&pp=ygUWaXJvbiBtYW4gYmxhY2sgc2FiYmF0aKAHAQ%3D%3D"
+
+# URL que deve abrir no comando "Jarvis, Alura".
+ALURA_URL = "https://cursos.alura.com.br/loginForm?urlAfterLogin=https%3A%2F%2Fcursos.alura.com.br%2Fclasspage%2Fjava-trabalhando-lambdas-streams-spring-framework%2Ftask%2F135646"
 
 # Posição do monitor secundário em relação ao principal: "left" ou "right".
 # Isso só é usado como critério de desempate caso o Windows não informe
@@ -160,7 +163,13 @@ def move_window_to_monitor(window, monitor):
 # Ações
 # ==========================================================
 
-def open_youtube_on_secondary():
+def open_url_on_secondary(url, window_title_hint=None):
+    """Abre uma URL em uma nova janela do navegador, no monitor secundário.
+
+    window_title_hint: um texto que costuma aparecer no título da aba/janela
+    (ex: "YouTube", "Alura") para ajudar a encontrar a janela mais rápido.
+    Opcional - se não achar por esse texto, tenta pelo nome do navegador.
+    """
     primary, secondary = get_primary_and_secondary_monitors()
     browser_path = find_browser_path()
 
@@ -170,11 +179,14 @@ def open_youtube_on_secondary():
         return
 
     print(f"Abrindo navegador em nova janela: {browser_path}")
-    subprocess.Popen([browser_path, "--new-window", YOUTUBE_VIDEO_URL])
+    subprocess.Popen([browser_path, "--new-window", url])
 
     print("Aguardando a janela do navegador abrir...")
+    window = None
+    if window_title_hint:
+        window = wait_for_window(window_title_hint)
     window = (
-        wait_for_window("YouTube")
+        window
         or wait_for_window("Opera")
         or wait_for_window("Chrome")
         or wait_for_window("Edge")
@@ -187,7 +199,15 @@ def open_youtube_on_secondary():
 
     print(f"Movendo janela para o monitor secundário ({SECONDARY_MONITOR_SIDE})...")
     move_window_to_monitor(window, secondary)
-    print("Pronto! YouTube aberto no monitor secundário.")
+    print("Pronto! Site aberto no monitor secundário.")
+
+
+def open_youtube_on_secondary():
+    open_url_on_secondary(YOUTUBE_VIDEO_URL, window_title_hint="YouTube")
+
+
+def open_alura_on_secondary():
+    open_url_on_secondary(ALURA_URL, window_title_hint="Alura")
 
 
 def open_intellij_on_primary():
@@ -224,21 +244,24 @@ def open_intellij_on_primary():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Jarvis - protótipo de automação (abrir YouTube e IntelliJ)"
+        description="Jarvis - protótipo de automação (abrir YouTube/Alura e IntelliJ)"
     )
     parser.add_argument(
         "acao",
         nargs="?",
         default="tudo",
-        choices=["youtube", "intellij", "tudo"],
-        help="O que executar: youtube, intellij ou tudo (padrão: tudo)",
+        choices=["youtube", "alura", "intellij", "tudo"],
+        help="O que executar: youtube, alura, intellij ou tudo (padrão: tudo = youtube + intellij)",
     )
     args = parser.parse_args()
 
     if args.acao in ("youtube", "tudo"):
         open_youtube_on_secondary()
 
-    if args.acao in ("intellij", "tudo"):
+    if args.acao == "alura":
+        open_alura_on_secondary()
+
+    if args.acao in ("intellij", "tudo", "alura"):
         open_intellij_on_primary()
 
 

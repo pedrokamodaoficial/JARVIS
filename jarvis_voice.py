@@ -36,16 +36,19 @@ import weather  # horário local e clima atual
 # CONFIGURAÇÃO — edite conforme preferir
 # ==========================================================
 
-# Palavra(s) de ativação e palavra(s) de comando. O Jarvis só dispara a
-# ação quando ouvir PELO MENOS uma palavra de cada lista na mesma frase.
+# Palavra(s) de ativação. O Jarvis só reage se ouvir uma delas na frase.
 WAKE_WORDS = ["jarvis"]
-COMMAND_WORDS = ["ligar", "liga", "iniciar", "inicia", "começar", "começa", "start", "run", "está na hora"]
+
+# Comando padrão: "Jarvis, ligar" -> abre YouTube + IntelliJ (+ horário/clima).
+DEFAULT_COMMAND_WORDS = ["ligar", "liga", "iniciar", "inicia", "começar", "começa", "abrir", "abre", "esta na hora"]
+DEFAULT_RESPONSE_TEXT = "Perfeito, senhor. Iniciando os programas agora. Vamos com Iron Man, do Black Sabbath, para entrar no clima"
+
+# Comando Alura: "Jarvis, Alura" -> abre o site da Alura + IntelliJ.
+ALURA_COMMAND_WORDS = ["alura"]
+ALURA_RESPONSE_TEXT = "Abrindo Alura, senhor"
 
 # Idioma usado no reconhecimento de voz.
 LANGUAGE = "pt-BR"
-
-# O que o Jarvis fala ao reconhecer o comando.
-RESPONSE_TEXT = "Perfeito senhor, sistema iniciando."
 
 # Voz neural do Edge TTS. Algumas opções em português do Brasil:
 #   "pt-BR-AntonioNeural"   -> masculina
@@ -128,11 +131,23 @@ def speak(text):
 # Escuta e detecção do comando
 # ==========================================================
 
-def contains_wake_command(text):
+def detect_command(text):
+    """Identifica qual comando foi falado, ou None se não reconhecer nenhum.
+
+    Retorna "default", "alura" ou None.
+    """
     text = text.lower()
-    has_wake = any(w in text for w in WAKE_WORDS)
-    has_command = any(w in text for w in COMMAND_WORDS)
-    return has_wake and has_command
+
+    if not any(w in text for w in WAKE_WORDS):
+        return None
+
+    if any(w in text for w in ALURA_COMMAND_WORDS):
+        return "alura"
+
+    if any(w in text for w in DEFAULT_COMMAND_WORDS):
+        return "default"
+
+    return None
 
 
 def list_microphones():
@@ -152,7 +167,7 @@ def listen_loop():
     with sr.Microphone(device_index=MIC_DEVICE_INDEX) as source:
         print("Calibrando ruído ambiente... fique em silêncio por um instante.")
         recognizer.adjust_for_ambient_noise(source, duration=1.5)
-        print('Pronto. Diga "Jarvis, ligar" para iniciar. (Ctrl+C para sair)')
+        print('Pronto. Diga "Jarvis, ligar" ou "Jarvis, Alura" para iniciar. (Ctrl+C para sair)')
 
         while True:
             try:
@@ -173,8 +188,10 @@ def listen_loop():
                 time.sleep(2)
                 continue
 
-            if contains_wake_command(text):
-                speak(RESPONSE_TEXT)
+            command = detect_command(text)
+
+            if command == "default":
+                speak(DEFAULT_RESPONSE_TEXT)
 
                 # Abre os programas em segundo plano (threads), sem bloquear
                 # o resto do fluxo. Isso evita que o Jarvis fique "mudo"
@@ -187,7 +204,18 @@ def listen_loop():
                 if ANNOUNCE_TIME_AND_WEATHER:
                     speak(weather.build_status_phrase())
 
-                print('\nPronto. Diga "Jarvis, ligar" novamente se quiser repetir.')
+                print('\nPronto. Diga "Jarvis, ligar" ou "Jarvis, Alura" para repetir.')
+
+            elif command == "alura":
+                speak(ALURA_RESPONSE_TEXT)
+
+                threading.Thread(target=jarvis.open_alura_on_secondary, daemon=True).start()
+                threading.Thread(target=jarvis.open_intellij_on_primary, daemon=True).start()
+
+                if ANNOUNCE_TIME_AND_WEATHER:
+                    speak(weather.build_status_phrase())
+
+                print('\nPronto. Diga "Jarvis, ligar" ou "Jarvis, Alura" para repetir.')
 
 
 def main():

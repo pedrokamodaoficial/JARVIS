@@ -7,3 +7,5 @@ PyAudio
 edge-tts
 pygame
 requests
+pystray
+Pillow
