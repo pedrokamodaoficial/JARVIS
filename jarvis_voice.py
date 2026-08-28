@@ -41,19 +41,34 @@ WAKE_WORDS = ["jarvis"]
 
 # Comando padrão: "Jarvis, ligar" -> abre YouTube + IntelliJ (+ horário/clima).
 DEFAULT_COMMAND_WORDS = ["ligar", "liga", "iniciar", "inicia"]
-DEFAULT_RESPONSE_TEXT = "Olá senhor, o sistema está iniciando. Aguarde um instante enquanto abro o YouTube e o IntelliJ."
+DEFAULT_RESPONSE_TEXT = "Olá senhor, iniciando o sistema"
 
 # Comando Alura: "Jarvis, Alura" -> abre o site da Alura + IntelliJ.
 ALURA_COMMAND_WORDS = ["alura"]
-ALURA_RESPONSE_TEXT = "Abrindo Alura, senhor"
+ALURA_RESPONSE_TEXT = "Perfeito, abrindo Alura e o IntelliJ, senhor, hoje será promissor."
 
 # Comando de vagas: "Jarvis, envie meu currículo" -> abre busca de vagas
 # filtrada no LinkedIn (local + remoto). NÃO envia candidaturas sozinho -
 # você revisa e se candidata manualmente. Veja o README para detalhes.
-CURRICULO_COMMAND_WORDS = ["currículo", "curriculo","vagas", "emprego", "trabalho"]
+CURRICULO_COMMAND_WORDS = ["currículo", "curriculo"]
 CURRICULO_RESPONSE_TEXT = (
     "Abrindo vagas filtradas no LinkedIn, senhor. "
 )
+
+# Comando de desligar: "Jarvis, encerrar por hoje" -> desliga o Windows.
+# Exige as DUAS palavras (mais rígido que os outros comandos de propósito,
+# já que é uma ação destrutiva) e dá um tempo de segurança antes de
+# desligar de verdade - veja SHUTDOWN_DELAY_SECONDS no jarvis.py.
+SHUTDOWN_COMMAND_WORDS = ["encerrar"]
+SHUTDOWN_CONFIRM_WORDS = ["hoje"]  # precisa aparecer JUNTO com "encerrar"
+SHUTDOWN_RESPONSE_TEXT = (
+    f"Encerrando o computador em {jarvis.SHUTDOWN_DELAY_SECONDS} segundos, senhor. "
+    'Diga "Jarvis, cancelar" se quiser interromper.'
+)
+
+# Comando para abortar o desligamento agendado: "Jarvis, cancelar".
+CANCEL_COMMAND_WORDS = ["cancelar"]
+CANCEL_RESPONSE_TEXT = "Desligamento cancelado, senhor."
 
 # Idioma usado no reconhecimento de voz.
 LANGUAGE = "pt-BR"
@@ -142,12 +157,22 @@ def speak(text):
 def detect_command(text):
     """Identifica qual comando foi falado, ou None se não reconhecer nenhum.
 
-    Retorna "default", "alura", "curriculo" ou None.
+    Retorna "default", "alura", "curriculo", "shutdown", "cancel" ou None.
     """
     text = text.lower()
 
     if not any(w in text for w in WAKE_WORDS):
         return None
+
+    # Comando de desligar exige as DUAS palavras juntas (mais rígido de
+    # propósito, por ser uma ação destrutiva).
+    has_shutdown_word = any(w in text for w in SHUTDOWN_COMMAND_WORDS)
+    has_confirm_word = any(w in text for w in SHUTDOWN_CONFIRM_WORDS)
+    if has_shutdown_word and has_confirm_word:
+        return "shutdown"
+
+    if any(w in text for w in CANCEL_COMMAND_WORDS):
+        return "cancel"
 
     if any(w in text for w in ALURA_COMMAND_WORDS):
         return "alura"
@@ -178,7 +203,11 @@ def listen_loop():
     with sr.Microphone(device_index=MIC_DEVICE_INDEX) as source:
         print("Calibrando ruído ambiente... fique em silêncio por um instante.")
         recognizer.adjust_for_ambient_noise(source, duration=1.5)
-        print('Pronto. Diga "Jarvis, ligar", "Jarvis, Alura" ou "Jarvis, envie meu currículo" para iniciar. (Ctrl+C para sair)')
+        print(
+            'Pronto. Comandos: "Jarvis, ligar" | "Jarvis, Alura" | '
+            '"Jarvis, envie meu currículo" | "Jarvis, encerrar por hoje" | '
+            '"Jarvis, cancelar". (Ctrl+C para sair)'
+        )
 
         while True:
             try:
@@ -236,6 +265,18 @@ def listen_loop():
                 ).start()
 
                 print('\nPronto. Diga "Jarvis, envie meu currículo" para repetir.')
+
+            elif command == "shutdown":
+                speak(SHUTDOWN_RESPONSE_TEXT)
+                jarvis.shutdown_computer()
+                print(
+                    f'\nDesligamento agendado. Diga "Jarvis, cancelar" nos próximos '
+                    f"{jarvis.SHUTDOWN_DELAY_SECONDS} segundos se quiser interromper."
+                )
+
+            elif command == "cancel":
+                jarvis.cancel_shutdown()
+                speak(CANCEL_RESPONSE_TEXT)
 
 
 def main():

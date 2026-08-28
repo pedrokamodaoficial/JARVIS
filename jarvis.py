@@ -96,6 +96,15 @@ LINKEDIN_EXPERIENCE_LEVELS = [1, 2, 3]
 LINKEDIN_LOCAL_WORKPLACE_TYPES = [1, 3]  # presencial + híbrido, perto de SP
 LINKEDIN_REMOTE_WORKPLACE_TYPES = [2]  # remoto, sem restrição de local
 
+# ----------------------------------------------------------
+# Desligar o computador ("Jarvis, encerrar por hoje")
+# ----------------------------------------------------------
+# Tempo de espera (segundos) entre o comando de voz e o desligamento de
+# fato. Dá tempo de cancelar (dizendo "Jarvis, cancelar") caso o
+# reconhecimento de voz tenha entendido errado, ou caso você tenha algo
+# não salvo em algum programa.
+SHUTDOWN_DELAY_SECONDS = 25
+
 # Posição do monitor secundário em relação ao principal: "left" ou "right".
 # Isso só é usado como critério de desempate caso o Windows não informe
 # claramente qual monitor é qual - normalmente a detecção automática
@@ -293,6 +302,45 @@ def open_linkedin_job_search_on_secondary():
     open_url_on_secondary([local_url, remote_url], window_title_hint="LinkedIn")
 
 
+def shutdown_computer(delay_seconds=SHUTDOWN_DELAY_SECONDS):
+    """Agenda o desligamento do Windows daqui a `delay_seconds` segundos.
+
+    Usa o comando nativo `shutdown /s /t <segundos>` do Windows. O
+    desligamento agendado pode ser cancelado a qualquer momento (dentro do
+    prazo) com cancel_shutdown() - por voz, "Jarvis, cancelar".
+    """
+    print(f"Agendando desligamento do Windows em {delay_seconds} segundos...")
+    try:
+        subprocess.run(
+            ["shutdown", "/s", "/t", str(delay_seconds)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        print("Desligamento agendado com sucesso.")
+    except subprocess.CalledProcessError as exc:
+        print(f"Não consegui agendar o desligamento: {exc.stderr or exc}")
+    except FileNotFoundError:
+        print("Comando 'shutdown' não encontrado - isso só funciona no Windows.")
+
+
+def cancel_shutdown():
+    """Cancela um desligamento agendado, se houver algum pendente."""
+    print("Tentando cancelar desligamento agendado...")
+    try:
+        subprocess.run(
+            ["shutdown", "/a"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        print("Desligamento cancelado com sucesso.")
+    except subprocess.CalledProcessError:
+        print("Não havia nenhum desligamento agendado para cancelar (ou já era tarde demais).")
+    except FileNotFoundError:
+        print("Comando 'shutdown' não encontrado - isso só funciona no Windows.")
+
+
 def open_intellij_on_primary():
     primary, secondary = get_primary_and_secondary_monitors()
 
@@ -333,8 +381,11 @@ def main():
         "acao",
         nargs="?",
         default="tudo",
-        choices=["youtube", "alura", "linkedin", "intellij", "tudo"],
-        help="O que executar: youtube, alura, linkedin, intellij ou tudo (padrão: tudo = youtube + intellij)",
+        choices=["youtube", "alura", "linkedin", "intellij", "shutdown", "cancelar", "tudo"],
+        help=(
+            "O que executar: youtube, alura, linkedin, intellij, shutdown, "
+            "cancelar ou tudo (padrão: tudo = youtube + intellij)"
+        ),
     )
     args = parser.parse_args()
 
@@ -346,6 +397,12 @@ def main():
 
     if args.acao == "linkedin":
         open_linkedin_job_search_on_secondary()
+
+    if args.acao == "shutdown":
+        shutdown_computer()
+
+    if args.acao == "cancelar":
+        cancel_shutdown()
 
     if args.acao in ("intellij", "tudo", "alura"):
         open_intellij_on_primary()
