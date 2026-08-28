@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import argparse
+import urllib.parse
 from pathlib import Path
 
 try:
@@ -54,10 +55,46 @@ BROWSER_PATH = r"C:\Users\kamodares\AppData\Local\Programs\Opera GX\opera.exe"
 # OBS: "Iron Man" é do Black Sabbath, não do Iron Maiden (são bandas
 # diferentes). Deixei o clipe oficial do Black Sabbath como padrão.
 # Troque pela URL que você quiser (ex: uma música do Iron Maiden).
-YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v=b3-QqGVt-tM&list=RDb3-QqGVt-tM&start_radio=1&pp=ygUWaXJvbiBtYW4gYmxhY2sgc2FiYmF0aKAHAQ%3D%3D"
+YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v=7ZuoM3Ivgt0"
 
 # URL que deve abrir no comando "Jarvis, Alura".
 ALURA_URL = "https://cursos.alura.com.br/loginForm?urlAfterLogin=https%3A%2F%2Fcursos.alura.com.br%2Fclasspage%2Fjava-trabalhando-lambdas-streams-spring-framework%2Ftask%2F135646"
+
+# ----------------------------------------------------------
+# Busca de vagas no LinkedIn ("Jarvis, envie meu currículo")
+# ----------------------------------------------------------
+# IMPORTANTE: isso NÃO clica em "Candidatura simplificada" automaticamente.
+# Automatizar candidaturas em massa viola os Termos de Uso do LinkedIn e
+# pode suspender sua conta. O que este comando faz é abrir a busca de
+# vagas já FILTRADA pelos critérios abaixo, em duas abas (vagas locais e
+# vagas remotas) - você revisa e se candidata manualmente nas que fizerem
+# sentido.
+
+# Nível de senioridade + área/tecnologia desejada, no formato de busca
+# booleana que o LinkedIn aceita (AND / OR / aspas para frase exata).
+LINKEDIN_KEYWORDS = (
+    '(Estágio OR Júnior OR Técnico) AND '
+    '(TI OR "Desenvolvedor Backend" OR "Desenvolvedor Fullstack" OR '
+    '"Help Desk" OR "Suporte de TI" OR Java OR C# OR Python OR '
+    'JavaScript OR TypeScript)'
+)
+
+# Localização usada na busca presencial/híbrida.
+LINKEDIN_LOCAL_LOCATION = "São Paulo, Brazil"
+
+# Raio de distância (em km) a partir de LINKEDIN_LOCAL_LOCATION, para
+# incluir cidades próximas (Grande São Paulo). Valores comuns aceitos
+# pelo LinkedIn: 8, 16, 40, 80, 160.
+LINKEDIN_LOCAL_DISTANCE_KM = 40
+
+# Códigos de nível de experiência do LinkedIn (parâmetro f_E):
+#   1 = Estágio | 2 = Júnior (Entry level) | 3 = Pleno/Técnico (Associate)
+LINKEDIN_EXPERIENCE_LEVELS = [1, 2, 3]
+
+# Códigos de modelo de trabalho do LinkedIn (parâmetro f_WT):
+#   1 = Presencial | 2 = Remoto | 3 = Híbrido
+LINKEDIN_LOCAL_WORKPLACE_TYPES = [1, 3]  # presencial + híbrido, perto de SP
+LINKEDIN_REMOTE_WORKPLACE_TYPES = [2]  # remoto, sem restrição de local
 
 # Posição do monitor secundário em relação ao principal: "left" ou "right".
 # Isso só é usado como critério de desempate caso o Windows não informe
@@ -163,13 +200,19 @@ def move_window_to_monitor(window, monitor):
 # Ações
 # ==========================================================
 
-def open_url_on_secondary(url, window_title_hint=None):
-    """Abre uma URL em uma nova janela do navegador, no monitor secundário.
+def open_url_on_secondary(urls, window_title_hint=None):
+    """Abre uma ou mais URLs em uma nova janela do navegador (cada URL extra
+    vira uma aba na mesma janela), movida para o monitor secundário.
 
+    urls: uma única URL (str) ou uma lista de URLs (list[str]).
     window_title_hint: um texto que costuma aparecer no título da aba/janela
-    (ex: "YouTube", "Alura") para ajudar a encontrar a janela mais rápido.
-    Opcional - se não achar por esse texto, tenta pelo nome do navegador.
+    (ex: "YouTube", "Alura", "LinkedIn") para ajudar a encontrar a janela
+    mais rápido. Opcional - se não achar por esse texto, tenta pelo nome
+    do navegador.
     """
+    if isinstance(urls, str):
+        urls = [urls]
+
     primary, secondary = get_primary_and_secondary_monitors()
     browser_path = find_browser_path()
 
@@ -179,7 +222,7 @@ def open_url_on_secondary(url, window_title_hint=None):
         return
 
     print(f"Abrindo navegador em nova janela: {browser_path}")
-    subprocess.Popen([browser_path, "--new-window", url])
+    subprocess.Popen([browser_path, "--new-window"] + urls)
 
     print("Aguardando a janela do navegador abrir...")
     window = None
@@ -208,6 +251,46 @@ def open_youtube_on_secondary():
 
 def open_alura_on_secondary():
     open_url_on_secondary(ALURA_URL, window_title_hint="Alura")
+
+
+def _build_linkedin_job_search_url(keywords, location=None, workplace_types=None,
+                                    experience_levels=None, distance_km=None):
+    params = {"keywords": keywords}
+    if location:
+        params["location"] = location
+    if workplace_types:
+        params["f_WT"] = ",".join(str(x) for x in workplace_types)
+    if experience_levels:
+        params["f_E"] = ",".join(str(x) for x in experience_levels)
+    if distance_km:
+        params["distance"] = str(distance_km)
+
+    query = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+    return f"https://www.linkedin.com/jobs/search/?{query}"
+
+
+def open_linkedin_job_search_on_secondary():
+    """Abre duas abas no LinkedIn: vagas locais (SP e região) e vagas remotas.
+
+    NÃO clica em nenhuma vaga nem envia candidaturas - só monta a busca já
+    filtrada. Depende de você já estar logado no LinkedIn no navegador
+    configurado (BROWSER_PATH).
+    """
+    local_url = _build_linkedin_job_search_url(
+        keywords=LINKEDIN_KEYWORDS,
+        location=LINKEDIN_LOCAL_LOCATION,
+        workplace_types=LINKEDIN_LOCAL_WORKPLACE_TYPES,
+        experience_levels=LINKEDIN_EXPERIENCE_LEVELS,
+        distance_km=LINKEDIN_LOCAL_DISTANCE_KM,
+    )
+    remote_url = _build_linkedin_job_search_url(
+        keywords=LINKEDIN_KEYWORDS,
+        workplace_types=LINKEDIN_REMOTE_WORKPLACE_TYPES,
+        experience_levels=LINKEDIN_EXPERIENCE_LEVELS,
+    )
+
+    print("Abrindo busca de vagas no LinkedIn (local + remoto)...")
+    open_url_on_secondary([local_url, remote_url], window_title_hint="LinkedIn")
 
 
 def open_intellij_on_primary():
@@ -250,8 +333,8 @@ def main():
         "acao",
         nargs="?",
         default="tudo",
-        choices=["youtube", "alura", "intellij", "tudo"],
-        help="O que executar: youtube, alura, intellij ou tudo (padrão: tudo = youtube + intellij)",
+        choices=["youtube", "alura", "linkedin", "intellij", "tudo"],
+        help="O que executar: youtube, alura, linkedin, intellij ou tudo (padrão: tudo = youtube + intellij)",
     )
     args = parser.parse_args()
 
@@ -260,6 +343,9 @@ def main():
 
     if args.acao == "alura":
         open_alura_on_secondary()
+
+    if args.acao == "linkedin":
+        open_linkedin_job_search_on_secondary()
 
     if args.acao in ("intellij", "tudo", "alura"):
         open_intellij_on_primary()
