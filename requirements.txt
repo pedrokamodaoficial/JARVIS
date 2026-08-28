@@ -1,0 +1,11 @@
+pygetwindow
+pywin32
+screeninfo
+SpeechRecognition
+pyttsx3
+PyAudio
+edge-tts
+pygame
+requests
+pystray
+Pillow
